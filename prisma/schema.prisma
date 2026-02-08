@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/*
+  Core domain models for ClearBooks
+  - One user → one business (V1)
+  - Ledger is append-only
+  - Opening snapshot is immutable
+*/
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  congnitoSub  String   @unique
+  createdAt DateTime @default(now())
+
+  business  Business?
+}
+
+model Business {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  name           String
+  province       String
+  gstRegistered  Boolean
+  createdAt      DateTime @default(now())
+
+  user           User             @relation(fields: [userId], references: [id])
+  snapshot       OpeningSnapshot?
+  transactions   Transaction[]
+  auditLogs      AuditLog[]
+}
+
+model OpeningSnapshot {
+  id                 String   @id @default(uuid())
+  businessId         String   @unique
+  effectiveDate      DateTime
+
+  cashCents          BigInt
+  receivablesCents   BigInt
+  payablesCents      BigInt
+  taxPayableCents    BigInt
+
+  declaredByUser     Boolean  @default(true)
+  locked             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  business           Business @relation(fields: [businessId], references: [id])
+}
+
+model Transaction {
+  id           String   @id @default(uuid())
+  businessId   String
+
+  type         TransactionType
+  amountCents  BigInt
+  taxCents     BigInt   @default(0)
+  category     String
+  occurredAt   DateTime
+
+  source       TransactionSource
+  confirmed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  business     Business @relation(fields: [businessId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  businessId String
+  entity     String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionSource {
+  MANUAL
+  AI
+  UPLOAD
+}
+
