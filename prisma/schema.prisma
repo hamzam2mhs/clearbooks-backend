@@ -16,8 +16,8 @@ datasource db {
 
 model User {
   id        String   @id @default(uuid())
-  email     String   @unique
-  congnitoSub  String   @unique
+  email     String?   @unique
+  cognitoSub  String   @unique
   createdAt DateTime @default(now())
 
   business  Business?
