@@ -2,35 +2,43 @@ import express from 'express';
 import prisma from './config/prisma';
 import { authenticate } from './middleware/auth.middleware';
 import { ensureProvisioned } from './middleware/provision.middleware';
+import openingSnapshotRoutes from './routes/openingSnapshot.routes';
 
 const app = express();
 
 app.use(express.json());
 
-// App health
+// Health
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// DB health (temporary, dev-only)
+// DB health
 app.get('/health/db', async (_req, res) => {
   await prisma.$queryRaw`SELECT 1`;
   res.json({ db: 'connected' });
 });
 
-/**
- * 🔐 Auth + 🧠 Auto-provision
- */
-app.use('/api', authenticate, ensureProvisioned);
+// Protected business routes
+app.use(
+    '/api/opening-snapshot',
+    authenticate,
+    ensureProvisioned,
+    openingSnapshotRoutes
+);
 
-// Test protected + provisioned endpoint
-app.get('/api/me', (req, res) => {
-  res.json({
-    cognitoSub: req.user?.cognitoSub,
-    email: req.user?.email,
-    userId: req.userDb?.id,
-    businessId: req.userDb?.business?.id,
-  });
-});
+// Test identity
+app.get('/api/me',
+    authenticate,
+    ensureProvisioned,
+    (req, res) => {
+      res.json({
+        cognitoSub: req.user?.cognitoSub,
+        email: req.user?.email,
+        userId: req.context?.userId,
+        businessId: req.context?.businessId,
+      });
+    }
+);
 
 export default app;

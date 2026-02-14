@@ -2,9 +2,9 @@ import type { Request, Response, NextFunction } from 'express';
 import { provisionUser } from '../utils/provisionUser';
 
 export async function ensureProvisioned(
-  req: Request,
-  res: Response,
-  next: NextFunction
+    req: Request,
+    res: Response,
+    next: NextFunction
 ) {
   try {
     if (!req.user?.cognitoSub) {
@@ -16,7 +16,19 @@ export async function ensureProvisioned(
       email: req.user.email,
     });
 
-    req.userDb = user;
+    if (!user.business) {
+      return res.status(500).json({
+        error: 'INTERNAL_ERROR',
+        message: 'User has no business associated',
+      });
+    }
+
+    // ✅ Attach minimal context only
+    req.context = {
+      userId: user.id,
+      businessId: user.business.id,
+    };
+
     next();
   } catch (err) {
     console.error('Provisioning failed:', err);
