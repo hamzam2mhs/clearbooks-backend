@@ -120,4 +120,65 @@ router.get('/tax', async (req, res) => {
     }
 });
 
+/**
+ * --------------------------------------------------------
+ * GET /api/summary/profit
+ * Returns:
+ *  - total income
+ *  - total expenses
+ *  - net profit
+ * --------------------------------------------------------
+ */
+router.get('/profit', async (req, res) => {
+    try {
+        const businessId = req.context?.businessId;
+        if (!businessId) {
+            return res.status(401).json({ error: 'UNAUTHORIZED' });
+        }
+
+        const from = req.query.from as string | undefined;
+        const to = req.query.to as string | undefined;
+
+        const dateFilter = buildDateFilter(from, to);
+
+        // Aggregate income
+        const incomeResult = await prisma.transaction.aggregate({
+            where: {
+                businessId,
+                type: 'INCOME',
+                occurredAt: dateFilter,
+            },
+            _sum: {
+                amountCents: true,
+            },
+        });
+
+        // Aggregate expenses
+        const expenseResult = await prisma.transaction.aggregate({
+            where: {
+                businessId,
+                type: 'EXPENSE',
+                occurredAt: dateFilter,
+            },
+            _sum: {
+                amountCents: true,
+            },
+        });
+
+        const totalIncome = BigInt(incomeResult._sum.amountCents ?? 0);
+        const totalExpenses = BigInt(expenseResult._sum.amountCents ?? 0);
+        const netProfit = totalIncome - totalExpenses;
+
+        return res.json({
+            totalIncomeCents: totalIncome.toString(),
+            totalExpenseCents: totalExpenses.toString(),
+            netProfitCents: netProfit.toString(),
+        });
+
+    } catch (err) {
+        console.error('Profit summary failed:', err);
+        return res.status(500).json({ error: 'INTERNAL_ERROR' });
+    }
+});
+
 export default router;
