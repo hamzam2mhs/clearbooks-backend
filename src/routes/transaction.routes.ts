@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../config/prisma';
+import { ensureMonthlyPeriod } from '../utils/period.service';
 
 const router = Router();
 
@@ -47,6 +48,19 @@ router.post('/income', async (req, res) => {
       });
     }
 
+    const occurredDate = new Date(occurredAt);
+
+    // Ensure monthly reporting period exists
+    const period = await ensureMonthlyPeriod(businessId, occurredDate);
+
+    // Prevent posting into locked period
+    if (period.locked) {
+      return res.status(400).json({
+        error: 'PERIOD_LOCKED',
+        message: 'Cannot add transaction to locked reporting period',
+      });
+    }
+
     const transaction = await prisma.transaction.create({
       data: {
         businessId,
@@ -54,7 +68,7 @@ router.post('/income', async (req, res) => {
         amountCents: BigInt(amountCents),
         taxCents: BigInt(taxCents),
         category,
-        occurredAt: new Date(occurredAt),
+        occurredAt: occurredDate,
         source: 'MANUAL',
         confirmed: true,
       },
@@ -90,6 +104,19 @@ router.post('/expense', async (req, res) => {
       });
     }
 
+    const occurredDate = new Date(occurredAt);
+
+    // Ensure monthly reporting period exists
+    const period = await ensureMonthlyPeriod(businessId, occurredDate);
+
+    // Prevent posting into locked period
+    if (period.locked) {
+      return res.status(400).json({
+        error: 'PERIOD_LOCKED',
+        message: 'Cannot add transaction to locked reporting period',
+      });
+    }
+
     const transaction = await prisma.transaction.create({
       data: {
         businessId,
@@ -97,7 +124,7 @@ router.post('/expense', async (req, res) => {
         amountCents: BigInt(amountCents),
         taxCents: BigInt(taxCents),
         category,
-        occurredAt: new Date(occurredAt),
+        occurredAt: occurredDate,
         source: 'MANUAL',
         confirmed: true,
       },

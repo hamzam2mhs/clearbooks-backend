@@ -5,6 +5,7 @@ import { ensureProvisioned } from './middleware/provision.middleware';
 import transactionRoutes from './routes/transaction.routes';
 import openingSnapshotRoutes from './routes/openingSnapshot.routes';
 import summaryRoutes from './routes/summary.routes'
+import periodsRoutes from './routes/periods.routes';
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.get('/health/db', async (_req, res) => {
 });
 
 /**
- * 🔐 Protected routes
+ * Protected routes
  * Every route below:
  *  - Verifies JWT
  *  - Ensures user + business exist
@@ -50,6 +51,14 @@ app.use(
     authenticate,
     ensureProvisioned,
     summaryRoutes
+);
+
+//periods
+app.use(
+    '/api/periods',
+    authenticate,
+    ensureProvisioned,
+    periodsRoutes
 );
 
 // Identity test

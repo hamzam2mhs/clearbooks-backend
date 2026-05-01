@@ -24,10 +24,11 @@ model Business {
   gstRegistered Boolean
   createdAt     DateTime @default(now())
 
-  user         User             @relation(fields: [userId], references: [id])
-  snapshot     OpeningSnapshot?
-  transactions Transaction[]
-  auditLogs    AuditLog[]
+  user            User              @relation(fields: [userId], references: [id])
+  snapshot        OpeningSnapshot?
+  transactions    Transaction[]
+  auditLogs       AuditLog[]
+  ReportingPeriod ReportingPeriod[]
 }
 
 model OpeningSnapshot {
@@ -75,6 +76,26 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id])
+}
+
+model ReportingPeriod {
+  id         String     @id @default(uuid())
+  businessId String
+  startDate  DateTime
+  endDate    DateTime
+  type       PeriodType
+  locked     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, startDate, endDate])
+}
+
+enum PeriodType {
+  MONTHLY
+  QUARTERLY
+  YEARLY
 }
 
 enum TransactionType {
