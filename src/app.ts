@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import prisma from './config/prisma';
 import { authenticate } from './middleware/auth.middleware';
 import { ensureProvisioned } from './middleware/provision.middleware';
@@ -8,6 +9,13 @@ import summaryRoutes from './routes/summary.routes'
 import periodsRoutes from './routes/periods.routes';
 
 const app = express();
+
+app.use(
+    cors({
+        origin: 'http://localhost:5173',
+        credentials: true,
+    })
+);
 
 app.use(express.json());
 
