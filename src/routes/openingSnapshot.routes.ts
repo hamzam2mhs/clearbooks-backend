@@ -3,6 +3,39 @@ import prisma from '../config/prisma';
 
 const router = Router();
 
+function serializeOpeningSnapshot(snapshot: any) {
+    if (!snapshot) return null;
+
+    return {
+        ...snapshot,
+        cashCents: snapshot.cashCents.toString(),
+        receivablesCents: snapshot.receivablesCents.toString(),
+        payablesCents: snapshot.payablesCents.toString(),
+        taxPayableCents: snapshot.taxPayableCents.toString(),
+    };
+}
+
+// GET existing opening snapshot
+router.get('/', async (req, res) => {
+    try {
+        const businessId = req.context?.businessId;
+
+        if (!businessId) {
+            return res.status(401).json({ error: 'UNAUTHORIZED' });
+        }
+
+        const snapshot = await prisma.openingSnapshot.findUnique({
+            where: { businessId },
+        });
+
+        return res.json(serializeOpeningSnapshot(snapshot));
+    } catch (err) {
+        console.error('Get opening snapshot failed:', err);
+        return res.status(500).json({ error: 'INTERNAL_ERROR' });
+    }
+});
+
+// CREATE opening snapshot
 router.post('/', async (req, res) => {
     try {
         const businessId = req.context?.businessId;
@@ -63,10 +96,10 @@ router.post('/', async (req, res) => {
             },
         });
 
-        res.status(201).json(snapshot);
+        return res.status(201).json(serializeOpeningSnapshot(snapshot));
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'INTERNAL_ERROR' });
+        console.error('Create opening snapshot failed:', err);
+        return res.status(500).json({ error: 'INTERNAL_ERROR' });
     }
 });
 
