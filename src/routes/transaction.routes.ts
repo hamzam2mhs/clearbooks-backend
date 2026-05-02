@@ -27,6 +27,79 @@ function buildDateFilter(from?: string, to?: string) {
   };
 }
 
+function isPositiveInteger(value: unknown) {
+  return Number.isInteger(Number(value)) && Number(value) > 0;
+}
+
+function isNonNegativeInteger(value: unknown) {
+  return Number.isInteger(Number(value)) && Number(value) >= 0;
+}
+
+function getEndOfToday() {
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  return endOfToday;
+}
+
+type TransactionDateValidationResult =
+    | {
+  valid: true;
+}
+    | {
+  valid: false;
+  status: number;
+  body: {
+    error: string;
+    message: string;
+  };
+};
+
+async function validateTransactionDate(
+    businessId: string,
+    occurredDate: Date
+): Promise<TransactionDateValidationResult> {
+  if (Number.isNaN(occurredDate.getTime())) {
+    return {
+      valid: false,
+      status: 400,
+      body: {
+        error: 'INVALID_DATE',
+        message: 'Transaction date is invalid',
+      },
+    };
+  }
+
+  if (occurredDate > getEndOfToday()) {
+    return {
+      valid: false,
+      status: 400,
+      body: {
+        error: 'FUTURE_TRANSACTION_NOT_ALLOWED',
+        message: 'Transaction date cannot be in the future',
+      },
+    };
+  }
+
+  const openingSnapshot = await prisma.openingSnapshot.findUnique({
+    where: { businessId },
+  });
+
+  if (openingSnapshot && occurredDate < openingSnapshot.effectiveDate) {
+    return {
+      valid: false,
+      status: 400,
+      body: {
+        error: 'BEFORE_OPENING_SNAPSHOT',
+        message: 'Transaction date cannot be before the opening snapshot date',
+      },
+    };
+  }
+
+  return {
+    valid: true,
+  };
+}
+
 /**
  * --------------------------------------------------------
  * POST /api/transactions/income
@@ -35,25 +108,47 @@ function buildDateFilter(from?: string, to?: string) {
 router.post('/income', async (req, res) => {
   try {
     const businessId = req.context?.businessId;
+
     if (!businessId) {
       return res.status(401).json({ error: 'UNAUTHORIZED' });
     }
 
     const { amountCents, taxCents = 0, category, occurredAt } = req.body;
 
-    if (!amountCents || !category || !occurredAt) {
+    if (amountCents == null || !category || !occurredAt) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'amountCents, category, and occurredAt are required',
       });
     }
 
+    if (!isPositiveInteger(amountCents)) {
+      return res.status(400).json({
+        error: 'INVALID_AMOUNT',
+        message: 'amountCents must be a positive integer',
+      });
+    }
+
+    if (!isNonNegativeInteger(taxCents)) {
+      return res.status(400).json({
+        error: 'INVALID_TAX_AMOUNT',
+        message: 'taxCents must be a non-negative integer',
+      });
+    }
+
     const occurredDate = new Date(occurredAt);
 
-    // Ensure monthly reporting period exists
+    const dateValidation = await validateTransactionDate(
+        businessId,
+        occurredDate
+    );
+
+    if (!dateValidation.valid) {
+      return res.status(dateValidation.status).json(dateValidation.body);
+    }
+
     const period = await ensureMonthlyPeriod(businessId, occurredDate);
 
-    // Prevent posting into locked period
     if (period.locked) {
       return res.status(400).json({
         error: 'PERIOD_LOCKED',
@@ -75,13 +170,11 @@ router.post('/income', async (req, res) => {
     });
 
     return res.status(201).json(serializeTransaction(transaction));
-
   } catch (err) {
     console.error('Create income failed:', err);
     return res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });
-
 
 /**
  * --------------------------------------------------------
@@ -91,25 +184,47 @@ router.post('/income', async (req, res) => {
 router.post('/expense', async (req, res) => {
   try {
     const businessId = req.context?.businessId;
+
     if (!businessId) {
       return res.status(401).json({ error: 'UNAUTHORIZED' });
     }
 
     const { amountCents, taxCents = 0, category, occurredAt } = req.body;
 
-    if (!amountCents || !category || !occurredAt) {
+    if (amountCents == null || !category || !occurredAt) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'amountCents, category, and occurredAt are required',
       });
     }
 
+    if (!isPositiveInteger(amountCents)) {
+      return res.status(400).json({
+        error: 'INVALID_AMOUNT',
+        message: 'amountCents must be a positive integer',
+      });
+    }
+
+    if (!isNonNegativeInteger(taxCents)) {
+      return res.status(400).json({
+        error: 'INVALID_TAX_AMOUNT',
+        message: 'taxCents must be a non-negative integer',
+      });
+    }
+
     const occurredDate = new Date(occurredAt);
 
-    // Ensure monthly reporting period exists
+    const dateValidation = await validateTransactionDate(
+        businessId,
+        occurredDate
+    );
+
+    if (!dateValidation.valid) {
+      return res.status(dateValidation.status).json(dateValidation.body);
+    }
+
     const period = await ensureMonthlyPeriod(businessId, occurredDate);
 
-    // Prevent posting into locked period
     if (period.locked) {
       return res.status(400).json({
         error: 'PERIOD_LOCKED',
@@ -131,23 +246,22 @@ router.post('/expense', async (req, res) => {
     });
 
     return res.status(201).json(serializeTransaction(transaction));
-
   } catch (err) {
     console.error('Create expense failed:', err);
     return res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });
 
-
 /**
  * --------------------------------------------------------
  * GET /api/transactions
- * List transactions (optionally filtered by date)
+ * List transactions optionally filtered by date
  * --------------------------------------------------------
  */
 router.get('/', async (req, res) => {
   try {
     const businessId = req.context?.businessId;
+
     if (!businessId) {
       return res.status(401).json({ error: 'UNAUTHORIZED' });
     }
@@ -168,7 +282,6 @@ router.get('/', async (req, res) => {
     });
 
     return res.json(transactions.map(serializeTransaction));
-
   } catch (err) {
     console.error('List transactions failed:', err);
     return res.status(500).json({ error: 'INTERNAL_ERROR' });
