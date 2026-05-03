@@ -14,6 +14,9 @@ model User {
   createdAt  DateTime @default(now())
 
   business Business?
+
+  createdMigrationSessions MigrationSession[] @relation("MigrationSessionCreatedBy")
+  confirmedMigrationLogs   MigrationLog[]     @relation("MigrationLogConfirmedBy")
 }
 
 model Business {
@@ -24,11 +27,14 @@ model Business {
   gstRegistered Boolean
   createdAt     DateTime @default(now())
 
-  user            User              @relation(fields: [userId], references: [id])
-  snapshot        OpeningSnapshot?
-  transactions    Transaction[]
-  auditLogs       AuditLog[]
-  ReportingPeriod ReportingPeriod[]
+  user              User               @relation(fields: [userId], references: [id])
+  snapshot          OpeningSnapshot?
+  transactions      Transaction[]
+  auditLogs         AuditLog[]
+  reportingPeriods  ReportingPeriod[]
+  customers         Customer[]
+  migrationSessions MigrationSession[]
+  migrationLogs     MigrationLog[]
 }
 
 model OpeningSnapshot {
@@ -65,6 +71,23 @@ model Transaction {
   business Business @relation(fields: [businessId], references: [id])
 }
 
+model Customer {
+  id         String @id @default(uuid())
+  businessId String
+
+  name    String
+  email   String?
+  phone   String?
+  address String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, email])
+}
+
 model AuditLog {
   id         String   @id @default(uuid())
   businessId String
@@ -92,6 +115,54 @@ model ReportingPeriod {
   @@unique([businessId, startDate, endDate])
 }
 
+model MigrationSession {
+  id String @id @default(uuid())
+
+  businessId      String
+  createdByUserId String
+
+  sourceSoftware   MigrationSourceSoftware?
+  originalFileName String?
+  originalFileType String?
+  originalFileSize Int?
+
+  status MigrationSessionStatus @default(PENDING)
+
+  parsedData     Json
+  previewSummary Json?
+  skippedDetails Json?
+
+  expiresAt   DateTime
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business      Business @relation(fields: [businessId], references: [id])
+  createdByUser User     @relation("MigrationSessionCreatedBy", fields: [createdByUserId], references: [id])
+
+  logs MigrationLog[]
+}
+
+model MigrationLog {
+  id String @id @default(uuid())
+
+  migrationSessionId String
+  businessId         String
+  confirmedByUserId  String
+
+  customersImported    Int @default(0)
+  invoicesImported     Int @default(0)
+  transactionsImported Int @default(0)
+  recordsSkipped       Int @default(0)
+
+  skippedDetails Json?
+  completedAt    DateTime @default(now())
+
+  migrationSession MigrationSession @relation(fields: [migrationSessionId], references: [id])
+  business         Business         @relation(fields: [businessId], references: [id])
+  confirmedByUser  User             @relation("MigrationLogConfirmedBy", fields: [confirmedByUserId], references: [id])
+}
+
 enum PeriodType {
   MONTHLY
   QUARTERLY
@@ -107,4 +178,21 @@ enum TransactionSource {
   MANUAL
   AI
   UPLOAD
+}
+
+enum MigrationSessionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum MigrationSourceSoftware {
+  QUICKBOOKS
+  WAVE
+  FRESHBOOKS
+  XERO
+  SAGE
+  OTHER
 }
