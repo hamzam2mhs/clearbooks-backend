@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String?  @unique
+  cognitoSub String   @unique
+  createdAt  DateTime @default(now())
+
+  business Business?
+
+  createdMigrationSessions MigrationSession[] @relation("MigrationSessionCreatedBy")
+  confirmedMigrationLogs   MigrationLog[]     @relation("MigrationLogConfirmedBy")
+}
+
+model Business {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  name          String
+  province      String
+  gstRegistered Boolean
+  createdAt     DateTime @default(now())
+
+  user              User               @relation(fields: [userId], references: [id])
+  snapshot          OpeningSnapshot?
+  transactions      Transaction[]
+  auditLogs         AuditLog[]
+  reportingPeriods  ReportingPeriod[]
+  customers         Customer[]
+  migrationSessions MigrationSession[]
+  migrationLogs     MigrationLog[]
+}
+
+model OpeningSnapshot {
+  id            String   @id @default(uuid())
+  businessId    String   @unique
+  effectiveDate DateTime
+
+  cashCents        BigInt
+  receivablesCents BigInt
+  payablesCents    BigInt
+  taxPayableCents  BigInt
+
+  declaredByUser Boolean  @default(true)
+  locked         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+model Transaction {
+  id         String @id @default(uuid())
+  businessId String
+
+  type        TransactionType
+  amountCents BigInt
+  taxCents    BigInt          @default(0)
+  category    String
+  occurredAt  DateTime
+
+  source    TransactionSource
+  confirmed Boolean           @default(false)
+  createdAt DateTime          @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+model Customer {
+  id         String @id @default(uuid())
+  businessId String
+
+  name    String
+  email   String?
+  phone   String?
+  address String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, email])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  businessId String
+  entity     String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+model ReportingPeriod {
+  id         String     @id @default(uuid())
+  businessId String
+  startDate  DateTime
+  endDate    DateTime
+  type       PeriodType
+  locked     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, startDate, endDate])
+}
+
+model MigrationSession {
+  id String @id @default(uuid())
+
+  businessId      String
+  createdByUserId String
+
+  sourceSoftware   MigrationSourceSoftware?
+  originalFileName String?
+  originalFileType String?
+  originalFileSize Int?
+
+  status MigrationSessionStatus @default(PENDING)
+
+  parsedData     Json
+  previewSummary Json?
+  skippedDetails Json?
+
+  expiresAt   DateTime
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business      Business @relation(fields: [businessId], references: [id])
+  createdByUser User     @relation("MigrationSessionCreatedBy", fields: [createdByUserId], references: [id])
+
+  logs MigrationLog[]
+}
+
+model MigrationLog {
+  id String @id @default(uuid())
+
+  migrationSessionId String
+  businessId         String
+  confirmedByUserId  String
+
+  customersImported    Int @default(0)
+  invoicesImported     Int @default(0)
+  transactionsImported Int @default(0)
+  recordsSkipped       Int @default(0)
+
+  skippedDetails Json?
+  completedAt    DateTime @default(now())
+
+  migrationSession MigrationSession @relation(fields: [migrationSessionId], references: [id])
+  business         Business         @relation(fields: [businessId], references: [id])
+  confirmedByUser  User             @relation("MigrationLogConfirmedBy", fields: [confirmedByUserId], references: [id])
+}
+
+enum PeriodType {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionSource {
+  MANUAL
+  AI
+  UPLOAD
+}
+
+enum MigrationSessionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum MigrationSourceSoftware {
+  QUICKBOOKS
+  WAVE
+  FRESHBOOKS
+  XERO
+  SAGE
+  OTHER
+}
