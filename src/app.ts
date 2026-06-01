@@ -7,6 +7,7 @@ import transactionRoutes from './routes/transaction.routes';
 import openingSnapshotRoutes from './routes/openingSnapshot.routes';
 import summaryRoutes from './routes/summary.routes'
 import periodsRoutes from './routes/periods.routes';
+import migrationRoutes from './routes/migration.routes';
 
 const app = express();
 
@@ -67,6 +68,14 @@ app.use(
     authenticate,
     ensureProvisioned,
     periodsRoutes
+);
+
+// Migration
+app.use(
+    '/api/migration',
+    authenticate,
+    ensureProvisioned,
+    migrationRoutes
 );
 
 // Identity test
